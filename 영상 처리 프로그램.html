@@ -1,0 +1,2445 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <link rel="stylesheet" href="style.css">
+<script lang="javascript">
+// 전역 변수부
+
+var inCanvas, inCtx, inPaper, inFile;
+var inImage, inH, inW; 
+
+var outCanvas, outCtx, outPaper, outFile;
+var outImage, outH, outW;
+
+var resetCanvas;
+var resetImage, reH, reW;
+
+// 함수 선언부
+
+// 초기화 함수
+function init() { 
+    inCanvas = document.getElementById("inCanvas"); // 도화지에 접근
+    inCtx = inCanvas.getContext('2d'); // 물감, 붓이 들은 통
+    outCanvas = document.getElementById("outCanvas"); 
+    outCtx = outCanvas.getContext('2d');
+}
+
+// 이미지 열기
+function openImage(){
+    inFile = document.getElementById("inFile").files[0]; //~~512.raw
+    //중요! : 이미지의 폭과 높이를 계산  -Beta1에서는 특정 크기로 고정했었음-
+    inH = inW = Math.floor(Math.sqrt(inFile.size));
+    // 이미지 크기의 2차원 메모리를 할당(확보)
+    inImage = new Array(inH);
+    for(var i = 0; i < inH; i++){
+        inImage[i] = new Array(inW);
+    }
+    // 캔버스 크기 지정 
+    inCanvas.height = inH;
+    inCanvas.width = inW; 
+    // 파일 --> 메모리로 로딩
+    var reader = new FileReader();
+    reader.readAsBinaryString(inFile);
+    reader.onload = function(){
+        var blob = reader.result;// 파일을 한 덩어리(blob)로 가져옴
+        // blob에서 한점씩 뽑아서 ---> inImage 메모리 (높이x폭 반복)
+        for(var i = 0; i <inH; i++) {
+            for(var k= 0; k < inW; k++) {
+                var sPixel = (i*inH + k); //시작 위치
+                var ePixel = (i*inH + k) + 1; // 끝 위치
+                inImage[i][k] = blob.slice(sPixel, ePixel).charCodeAt(0);
+            }
+        }
+        reset_Save();
+        displayImage();
+
+    }
+}
+
+// 초기화용 이미지 저장
+function reset_Save(){
+    resetImage = new Array(outH);
+    for(var i = 0; i < inH; i++){
+        resetImage[i] = new Array(inW);
+    }
+
+    for(var i = 0; i < inH; i++)
+        for(var k = 0; k < inW; k++){
+            resetImage[i][k] = 0;
+        }
+            
+    
+    reH = inCanvas.height;
+    reW = inCanvas.width;
+
+        for (var i = 0; i < inH; i++){
+            for(var k = 0; k < inW; k++){
+                resetImage[i][k] = inImage[i][k];
+            }
+        }
+}
+
+// 편집 상태 저장
+function saveNow(){
+
+    inCanvas.height = outH;
+    inCanvas.width = outW; 
+    inH = outH;
+    inW = outW;
+    inImage = new Array(inH);
+    for(var i = 0; i < inH; i++){
+        inImage[i] = new Array(inW);
+    }
+    for (var i = 0; i < outH; i++){
+        for(var k = 0; k < outW; k++){
+            inImage[i][k] = outImage[i][k];
+        }
+    }
+    displayImage();
+}
+
+// 이미지 초기화
+function reset_Image(){
+    inCanvas.height = reH;
+    inCanvas.width = reW; 
+    inH = reH;
+    inW = reW;
+    inImage = new Array(inH);
+    for(var i = 0; i < inH; i++){
+        inImage[i] = new Array(inW);
+    }
+
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+             inImage[i][k] = resetImage[i][k];
+        }
+    }
+    outCtx.clearRect(0,0,outH,outW);
+    outCanvas.height = reH;
+    outCanvas.width = reW; 
+    displayImage();
+}
+
+// 입력 이미지 출력
+function displayImage() {
+    inPaper = inCtx.createImageData(inH, inW); // 빈 종이 준비
+    for(var i = 0; i <inH; i++){
+        for(var k= 0; k < inW; k++){
+            var px = inImage[i][k]; // '꽯'을 숫자 형태로 변경
+            inPaper.data[(i*inH + k)*4 + 0] = px; // Red
+            inPaper.data[(i*inH + k)*4 + 1] = px; // Green
+            inPaper.data[(i*inH + k)*4 + 2] = px; // Blue
+            inPaper.data[(i*inH + k)*4 + 3] = 255; // Alpha : 투명도 0 = 안보임
+        }
+    }
+    inCtx.putImageData(inPaper, 0, 0); //종이를 캔버스(0,0) = 왼쪽 위에 붙이기
+
+}
+
+// 결과 이미지 출력
+function displayNewImage(){
+    outPaper = outCtx.createImageData(outH, outW); // 빈 종이 준비
+    for(var i = 0; i <outH; i++){
+        for(var k= 0; k < outW; k++){
+            var px = outImage[i][k]; // 이미 숫자 형태라 charCodeAt 안필요
+            outPaper.data[(i*outH + k)*4 + 0] = px; // Red
+            outPaper.data[(i*outH + k)*4 + 1] = px; // Green
+            outPaper.data[(i*outH + k)*4 + 2] = px; // Blue
+            outPaper.data[(i*outH + k)*4 + 3] = 255; // Alpha : 투명도 0 = 안보임
+        }
+    }
+    outCtx.putImageData(outPaper, 0, 0); //종이를 캔버스(0,0) = 왼쪽 위에 붙이기
+
+}
+
+
+// 영상 처리 알고리즘 함수부
+function selectAlgo(selNum){
+    switch (parseInt(selNum.value)){
+        case 100 : egual_image(); break; // 동일 영상
+        case 101 : add_image(); break;
+        case 102 : subt_image(); break;
+        case 103 : reverse_image(); break;
+        case 104 : black_image(); break;
+        case 105 : black_avg_image(); break;
+        case 106 : black_mid_image(); break;
+        case 107 : gamma_image(); break;
+        case 108 : range_image(); break;
+        case 109 : parabolaCap_image(); break;
+        case 110 : parabolaCup_image(); break;
+        case 111 : multi_image(); break;
+        case 112 : div_image(); break;
+        case 113 : poster_image(); break;
+
+        case 201 : mirror1_image(); break;
+        case 202 : mirror2_image(); break;
+        case 203 : zoomOut_image(); break;
+        case 204 : zoomIn_image(); break;
+        case 205 : zoomIn2_image(); break;
+        case 206 : move_image(); break;
+        case 207 : rotate_image(); break;
+
+        case 301 : histoSt_image(); break;
+        case 302 : endIn_image(); break;
+        case 303 : histoEq_image(); break;
+        case 304 : histoSpe_image(); break;
+
+        case 401 : embos_image(); break;
+        case 402 : chooseBlur_image(); break;
+        case 403 : edgeP_image(); break;
+        case 404 : sharpe_image(); break;
+        case 405 : Hsharpe_image(); break;
+        case 406 : gaunisian_image(); break;
+        case 407 : Homogeneity_image(); break;
+        case 408 : embos2_image(); break;
+        case 409 : Differ_image(); break;
+        case 410 : LoG_image(); break;
+        case 411 : sharpe_image2(); break;
+        case 412 : sharpe_image3(); break;
+        case 413 : Laplacian_image(); break;
+        case 414 : DoG7_image(); break;
+        case 415 : DoG9_image(); break;
+        case 416 : edgeR_image(); break;
+
+    }
+}
+
+// ---------- 알고리즘 함수 ----------//
+// 동일 영상 
+function egual_image() {
+    // 중요! 출력 영상의 크기를 계산 - 기하학적 처리에서만 바뀜(회전 확대/축소 등)
+    outH = inH;
+    outW = inW;
+    // 이미지 크기의 2차원 메모리를 할당(확보)
+    outImage = new Array(outH);
+    for(var i = 0; i < outH; i++){
+        outImage[i] = new Array(outW);
+    }
+    // 캔버스 크기 지정 
+    outCanvas.height = outH;
+    outCanvas.width = outW; 
+    
+    // ** 진짜 영상처리 알고리즘 ** //
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            outImage[i][k] = inImage[i][k];
+        }
+    }
+    displayNewImage();
+}
+
+// ----- 화소 점 처리 -----//
+
+// 밝게 하기
+function add_image() {
+    // 중요! 출력 영상의 크기를 계산 - 기하학적 처리에서만 바뀜(회전 확대/축소 등)
+    outH = inH;
+    outW = inW;
+    // 이미지 크기의 2차원 메모리를 할당(확보)
+    outImage = new Array(outH);
+    for(var i = 0; i < outH; i++){
+        outImage[i] = new Array(outW);
+    }
+    // 캔버스 크기 지정 
+    outCanvas.height = outH;
+    outCanvas.width = outW; 
+    
+    // ** 진짜 영상처리 알고리즘 ** //
+    var value = parseInt(prompt("밝게하기", "정수값으로 입력하세요"));
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            if(inImage[i][k] + value > 255)
+                outImage[i][k] = 255;
+            else
+                outImage[i][k] = inImage[i][k] + value;
+        }
+    }
+    displayNewImage();
+}
+
+// 어둡게 하기
+function subt_image() {
+    // 중요! 출력 영상의 크기를 계산 - 기하학적 처리에서만 바뀜(회전 확대/축소 등)
+    outH = inH;
+    outW = inW;
+    // 이미지 크기의 2차원 메모리를 할당(확보)
+    outImage = new Array(outH);
+    for(var i = 0; i < outH; i++){
+        outImage[i] = new Array(outW);
+    }
+    // 캔버스 크기 지정 
+    outCanvas.height = outH;
+    outCanvas.width = outW; 
+    
+    // ** 진짜 영상처리 알고리즘 ** //
+    var value = parseInt(prompt("어둡게하기", "정수값으로 입력하세요"));
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            if(inImage[i][k] - value < 0)
+                outImage[i][k] = 0;
+            else
+                outImage[i][k] = inImage[i][k] - value;
+        }
+    }
+    displayNewImage();
+}
+
+// 반전 효과
+function reverse_image() { //반전영상
+    // 중요! 출력 영상의 크기를 계산 - 기하학적 처리에서만 바뀜(회전 확대/축소 등)
+    outH = inH;
+    outW = inW;
+    // 이미지 크기의 2차원 메모리를 할당(확보)
+    outImage = new Array(outH);
+    for(var i = 0; i < outH; i++){
+        outImage[i] = new Array(outW);
+    }
+    // 캔버스 크기 지정 
+    outCanvas.height = outH;
+    outCanvas.width = outW; 
+    
+    // ** 진짜 영상처리 알고리즘 ** //
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            outImage[i][k] = 255 - inImage[i][k];
+        }
+    }
+    displayNewImage();
+}
+
+// 흑백 (128기준)
+function black_image() { // 흑백 128 기준
+    // 중요! 출력 영상의 크기를 계산 - 기하학적 처리에서만 바뀜(회전 확대/축소 등)
+    outH = inH;
+    outW = inW;
+    // 이미지 크기의 2차원 메모리를 할당(확보)
+    outImage = new Array(outH);
+    for(var i = 0; i < outH; i++){
+        outImage[i] = new Array(outW);
+    }
+    // 캔버스 크기 지정 
+    outCanvas.height = outH;
+    outCanvas.width = outW; 
+    
+    // ** 진짜 영상처리 알고리즘 ** //
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            if(inImage[i][k] > 128)
+                outImage[i][k] = 255;
+            else
+                outImage[i][k] = 0;
+        }
+    }
+    displayNewImage();
+}
+
+//흑백 (평균값 기준)
+function black_avg_image() { // 흑백(평균값 기준)
+    // 중요! 출력 영상의 크기를 계산 - 기하학적 처리에서만 바뀜(회전 확대/축소 등)
+    outH = inH;
+    outW = inW;
+    // 이미지 크기의 2차원 메모리를 할당(확보)
+    outImage = new Array(outH);
+    for(var i = 0; i < outH; i++){
+        outImage[i] = new Array(outW);
+    }
+    // 캔버스 크기 지정 
+    outCanvas.height = outH;
+    outCanvas.width = outW; 
+    
+    // ** 진짜 영상처리 알고리즘 ** //
+    var sum_val = 0;
+    var count = 0;
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            sum_val += inImage[i][k];
+            count++;
+        }
+    }
+
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            if(inImage[i][k] > sum_val/count)
+                outImage[i][k] = 255;
+            else
+                outImage[i][k] = 0;
+        }
+    }
+    displayNewImage();
+}
+
+// 흑백 (중앙값 기준)
+function black_mid_image() {
+    // 중요! 출력 영상의 크기를 계산 - 기하학적 처리에서만 바뀜(회전 확대/축소 등)
+    outH = inH;
+    outW = inW;
+    // 이미지 크기의 2차원 메모리를 할당(확보)
+    outImage = new Array(outH);
+    for(var i = 0; i < outH; i++){
+        outImage[i] = new Array(outW);
+    }
+    // 캔버스 크기 지정 
+    outCanvas.height = outH;
+    outCanvas.width = outW; 
+    
+    // ** 진짜 영상처리 알고리즘 ** //
+
+    var result;
+    arr1 = new Array();
+    var count = 0;
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            arr1[count] = inImage[i][k];
+            count++;
+        }
+    }
+
+    arr1.sort(function(a, b){
+        return a - b; 
+    })
+
+    result = arr1[arr1.length/2];
+
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            if(inImage[i][k] > parseInt(result) )
+                outImage[i][k] = 255;
+            else
+                outImage[i][k] = 0;
+        }
+    }
+    displayNewImage();
+}
+
+// 감마 보정
+function gamma_image() {
+    // 중요! 출력 영상의 크기를 계산 - 기하학적 처리에서만 바뀜(회전 확대/축소 등)
+    outH = inH;
+    outW = inW;
+    // 이미지 크기의 2차원 메모리를 할당(확보)
+    outImage = new Array(outH);
+    for(var i = 0; i < outH; i++){
+        outImage[i] = new Array(outW);
+    }
+    // 캔버스 크기 지정 
+    outCanvas.height = outH;
+    outCanvas.width = outW; 
+    
+    // ** 진짜 영상처리 알고리즘 ** //
+    var value = parseInt(prompt("감마 보정 값", " "));
+
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            outImage[i][k] = parseInt(255*Math.pow(inImage[i][k]/255, 1/value));
+        }
+    }
+    displayNewImage();
+}
+
+// 범위 강조
+function range_image() {
+    // 중요! 출력 영상의 크기를 계산 - 기하학적 처리에서만 바뀜(회전 확대/축소 등)
+    outH = inH;
+    outW = inW;
+    // 이미지 크기의 2차원 메모리를 할당(확보)
+    outImage = new Array(outH);
+    for(var i = 0; i < outH; i++){
+        outImage[i] = new Array(outW);
+    }
+    // 캔버스 크기 지정 
+    outCanvas.height = outH;
+    outCanvas.width = outW; 
+    
+    // ** 진짜 영상처리 알고리즘 ** //
+    var value1 = parseInt(prompt("범위의 작은 값", " "));
+    var value2 = parseInt(prompt("범위의 큰 값", " "));
+
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            if(inImage[i][k] > value1 && inImage[i][k] < value2)
+                outImage[i][k] = 255;
+            else
+                outImage[i][k] = inImage[i][k];
+         }
+    }
+    displayNewImage();
+}
+
+// 파라볼라(캡) 보정
+function parabolaCap_image() {
+    // 중요! 출력 영상의 크기를 계산 - 기하학적 처리에서만 바뀜(회전 확대/축소 등)
+    outH = inH;
+    outW = inW;
+    // 이미지 크기의 2차원 메모리를 할당(확보)
+    outImage = new Array(outH);
+    for(var i = 0; i < outH; i++){
+        outImage[i] = new Array(outW);
+    }
+    // 캔버스 크기 지정 
+    outCanvas.height = outH;
+    outCanvas.width = outW; 
+    
+    // ** 진짜 영상처리 알고리즘 ** //
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            outImage[i][k] = parseInt(255*Math.pow(inImage[i][k]/127, 2))
+        }
+    }
+    displayNewImage();
+}
+
+// 파라볼라(컵) 보정
+function parabolaCup_image() {
+    // 중요! 출력 영상의 크기를 계산 - 기하학적 처리에서만 바뀜(회전 확대/축소 등)
+    outH = inH;
+    outW = inW;
+    // 이미지 크기의 2차원 메모리를 할당(확보)
+    outImage = new Array(outH);
+    for(var i = 0; i < outH; i++){
+        outImage[i] = new Array(outW);
+    }
+    // 캔버스 크기 지정 
+    outCanvas.height = outH;
+    outCanvas.width = outW; 
+    
+    // ** 진짜 영상처리 알고리즘 ** //
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            outImage[i][k] = parseInt(255 - 255*Math.pow(inImage[i][k]/127, 2));
+;
+        }
+    }
+    displayNewImage();
+}
+
+// 명도 증가
+function multi_image() {
+    // 중요! 출력 영상의 크기를 계산 - 기하학적 처리에서만 바뀜(회전 확대/축소 등)
+    outH = inH;
+    outW = inW;
+    // 이미지 크기의 2차원 메모리를 할당(확보)
+    outImage = new Array(outH);
+    for(var i = 0; i < outH; i++){
+        outImage[i] = new Array(outW);
+    }
+    // 캔버스 크기 지정 
+    outCanvas.height = outH;
+    outCanvas.width = outW; 
+    
+    // ** 진짜 영상처리 알고리즘 ** //
+    var value = parseInt(prompt("명도 증가", "정수값으로 입력하세요"));
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            if(inImage[i][k] * value > 255)
+                outImage[i][k] = 255;
+            else
+                outImage[i][k] = inImage[i][k] * value;
+        }
+    }
+    displayNewImage();
+}
+
+// 명도 감소
+function div_image() {
+    // 중요! 출력 영상의 크기를 계산 - 기하학적 처리에서만 바뀜(회전 확대/축소 등)
+    outH = inH;
+    outW = inW;
+    // 이미지 크기의 2차원 메모리를 할당(확보)
+    outImage = new Array(outH);
+    for(var i = 0; i < outH; i++){
+        outImage[i] = new Array(outW);
+    }
+    // 캔버스 크기 지정 
+    outCanvas.height = outH;
+    outCanvas.width = outW; 
+    
+    // ** 진짜 영상처리 알고리즘 ** //
+    var value = parseInt(prompt("명도 감소", "정수값으로 입력하세요"));
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            if(inImage[i][k] / value > 255)
+                outImage[i][k] = 255;
+            else
+                outImage[i][k] = parseInt(inImage[i][k] / value);
+        }
+    }
+    displayNewImage();
+}
+
+// 포스터라이징
+function poster_image() {
+    // 중요! 출력 영상의 크기를 계산 - 기하학적 처리에서만 바뀜(회전 확대/축소 등)
+    outH = inH;
+    outW = inW;
+    // 이미지 크기의 2차원 메모리를 할당(확보)
+    outImage = new Array(outH);
+    for(var i = 0; i < outH; i++){
+        outImage[i] = new Array(outW);
+    }
+    // 캔버스 크기 지정 
+    outCanvas.height = outH;
+    outCanvas.width = outW; 
+    
+    // ** 진짜 영상처리 알고리즘 ** //
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            if(inImage[i][k] > 223)
+                outImage[i][k] = 255;
+            else if(inImage[i][k] <= 223 && inImage[i][k] > 191)
+                outImage[i][k] = 223;
+            else if(inImage[i][k] <= 191 && inImage[i][k] > 159)
+                outImage[i][k] = 191;
+            else if(inImage[i][k] <= 159 && inImage[i][k] > 127)
+                outImage[i][k] = 159;
+            else if(inImage[i][k] <= 127 && inImage[i][k] > 95)
+                outImage[i][k] = 127;
+            else if(inImage[i][k] <= 95 && inImage[i][k] > 63)
+                outImage[i][k] = 95;
+            else if(inImage[i][k] <= 63 && inImage[i][k] > 31)
+                outImage[i][k] = 63;
+            else
+                outImage[i][k] = 0;
+        }
+    }
+    displayNewImage();
+}
+
+// ---------- 기하학 ----------//
+// 좌우 반전
+function mirror1_image() {
+    // 중요! 출력 영상의 크기를 계산 - 기하학적 처리에서만 바뀜(회전 확대/축소 등)
+    outH = inH;
+    outW = inW;
+    // 이미지 크기의 2차원 메모리를 할당(확보)
+    outImage = new Array(outH);
+    for(var i = 0; i < outH; i++){
+        outImage[i] = new Array(outW);
+    }
+    // 캔버스 크기 지정 
+    outCanvas.height = outH;
+    outCanvas.width = outW; 
+    
+    // ** 진짜 영상처리 알고리즘 ** //
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            outImage[i][inW-1-k] = inImage[i][k];
+        }
+    }
+    displayNewImage();
+}
+
+// 상하 반전
+function mirror2_image() {
+    // 중요! 출력 영상의 크기를 계산 - 기하학적 처리에서만 바뀜(회전 확대/축소 등)
+    outH = inH;
+    outW = inW;
+    // 이미지 크기의 2차원 메모리를 할당(확보)
+    outImage = new Array(outH);
+    for(var i = 0; i < outH; i++){
+        outImage[i] = new Array(outW);
+    }
+    // 캔버스 크기 지정 
+    outCanvas.height = outH;
+    outCanvas.width = outW; 
+    
+    // ** 진짜 영상처리 알고리즘 ** //
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            outImage[inW-1-i][k] = inImage[i][k];
+        }
+    }
+    displayNewImage();
+}
+
+// 축소 하기
+function zoomOut_image() {
+    var scale = parseInt(prompt("축소배율", 2));
+
+    // 중요! 출력 영상의 크기를 계산 - 기하학적 처리에서만 바뀜(회전 확대/축소 등)
+    outH = parseInt(inH/scale);
+    outW = parseInt(inW/scale);
+    // 이미지 크기의 2차원 메모리를 할당(확보)
+    outImage = new Array(outH);
+    for(var i = 0; i < outH; i++){
+        outImage[i] = new Array(outW);
+    }
+    // 캔버스 크기 지정 
+    outCanvas.height = outH;
+    outCanvas.width = outW; 
+    
+    // ** 진짜 영상처리 알고리즘 ** //
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            outImage[parseInt(i/scale)][parseInt(k/scale)] = inImage[i][k];
+        }
+    }
+    displayNewImage();
+}
+
+// 확대 하기(포워딩)
+function zoomIn_image() {
+    var scale = parseInt(prompt("확대배율", 2));
+
+    // 중요! 출력 영상의 크기를 계산 - 기하학적 처리에서만 바뀜(회전 확대/축소 등)
+    outH = parseInt(inH*scale);
+    outW = parseInt(inW*scale);
+    // 이미지 크기의 2차원 메모리를 할당(확보)
+    outImage = new Array(outH);
+    for(var i = 0; i < outH; i++){
+        outImage[i] = new Array(outW);
+    }
+    // 캔버스 크기 지정 
+    outCanvas.height = outH;
+    outCanvas.width = outW; 
+    
+    // ** 진짜 영상처리 알고리즘 ** //
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            outImage[parseInt(i*scale)][parseInt(k*scale)] = inImage[i][k];
+        }
+    }
+    displayNewImage();
+}
+
+// 확대 하기(백워딩) 
+function zoomIn2_image() {
+    var scale = parseInt(prompt("확대배율", 2));
+
+    // 중요! 출력 영상의 크기를 계산 - 기하학적 처리에서만 바뀜(회전 확대/축소 등)
+    outH = parseInt(inH*scale);
+    outW = parseInt(inW*scale);
+    // 이미지 크기의 2차원 메모리를 할당(확보)
+    outImage = new Array(outH);
+    for(var i = 0; i < outH; i++){
+        outImage[i] = new Array(outW);
+    }
+    // 캔버스 크기 지정 
+    outCanvas.height = outH;
+    outCanvas.width = outW; 
+    
+    // ** 진짜 영상처리 알고리즘 ** //
+    for (var i = 0; i < outH; i++){
+        for(var k = 0; k < outW; k++){
+            outImage[i][k] = inImage[parseInt(i/scale)][parseInt(k/scale)];
+        }
+    }
+    displayNewImage();
+}
+
+// 이동 하기
+function move_image() {
+    // 중요! 출력 영상의 크기를 계산 - 기하학적 처리에서만 바뀜(회전 확대/축소 등)
+    outH = inH;
+    outW = inW;
+    // 이미지 크기의 2차원 메모리를 할당(확보)
+    outImage = new Array(outH);
+    for(var i = 0; i < outH; i++){
+        outImage[i] = new Array(outW);
+    }
+    // 캔버스 크기 지정 
+    outCanvas.height = outH;
+    outCanvas.width = outW; 
+    
+    // ** 진짜 영상처리 알고리즘 ** //
+    var x_val = parseInt(prompt("이동할 x좌표", " "));
+    var y_val = parseInt(prompt("이동할 y좌표", " "));
+
+    for (var i=0; i<outH; i++) {
+        for (var k=0; k<outW; k++) {
+            if (i+x_val < outH && k+y_val < outW)
+            outImage[i+x_val][k+y_val] = inImage[i][k];
+            else outImage[i][k] === undefined;
+        }
+    }
+    displayNewImage();
+}
+
+// 회전 하기
+function rotate_image() {
+    // 중요! 출력 영상의 크기를 계산 - 기하학적 처리에서만 바뀜(회전 확대/축소 등)
+    outH = inH;
+    outW = inW;
+    // 이미지 크기의 2차원 메모리를 할당(확보)
+    outImage = new Array(outH);
+    for(var i = 0; i < outH; i++){
+        outImage[i] = new Array(outW);
+    }
+    // 캔버스 크기 지정 
+    outCanvas.height = outH;
+    outCanvas.width = outW; 
+    
+    // ** 진짜 영상처리 알고리즘 ** //
+    var v_degree = parseInt(prompt("회전할 각도 ", " "));
+    var v_radian = v_degree * Math.PI / 180.0;
+    var v_cos = Math.cos(v_radian);
+    var v_sin = Math.sin(v_radian);
+    var xc = parseInt(outH/2);
+    var yc = parseInt(outW/2);
+    var xd, yd;
+
+    for (var i=0; i<outH; i++) {
+        for (var k=0; k<outW; k++) {
+            xd = parseInt((i - xc)*v_cos - (k - yc)*v_sin + xc/inH*outH );
+            yd = parseInt((k - yc)*v_cos + (i - xc)*v_sin + yc/inW*outW);
+            if ((xd >= 0 && xd <inH) && (yd >=0 && yd <inW))
+                outImage[i][k] = inImage[xd][yd];
+            else outImage[i][k] = undefined;
+        }
+    }
+    displayNewImage();
+}
+
+// ---------- 히스토그램 ----------//
+// 히스토그램 보정
+function histoSt_image() {
+    // 중요! 출력 영상의 크기를 계산 - 기하학적 처리에서만 바뀜(회전 확대/축소 등)
+    outH = inH;
+    outW = inW;
+    // 이미지 크기의 2차원 메모리를 할당(확보)
+    outImage = new Array(outH);
+    for(var i = 0; i < outH; i++){
+        outImage[i] = new Array(outW);
+    }
+    // 캔버스 크기 지정 
+    outCanvas.height = outH;
+    outCanvas.width = outW; 
+    
+    // ** 진짜 영상처리 알고리즘 ** //
+    // new = (old - low) / (high - low) * 255
+    // outImage = =(inImage - low) / (high - low) * 255
+    
+    // 최대 최소 비교를 위해 값을 잡을 때 임의로 그 안의 값을 하나 선택하는 것이 좋다.
+    var low = inImage[0][0], high = inImage[0][0];
+
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            if(inImage[i][k] < low)
+                low = inImage[i][k];
+            if(inImage[i][k] > high)
+                high = inImage[i][k];
+        }
+    }
+
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            outImage[i][k] = (inImage[i][k]-low)/(high - low)*255;
+        }
+    }
+    displayNewImage();
+}
+
+// 엔드-인 탐색
+function endIn_image() { // 엔드-인 탐색
+    // 중요! 출력 영상의 크기를 계산 - 기하학적 처리에서만 바뀜(회전 확대/축소 등)
+    outH = inH;
+    outW = inW;
+    // 이미지 크기의 2차원 메모리를 할당(확보)
+    outImage = new Array(outH);
+    for(var i = 0; i < outH; i++){
+        outImage[i] = new Array(outW);
+    }
+    // 캔버스 크기 지정 
+    outCanvas.height = outH;
+    outCanvas.width = outW; 
+    
+    // ** 진짜 영상처리 알고리즘 ** //
+    var low = inImage[0][0], high = inImage[0][0];
+
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            if(inImage[i][k] < low)
+                low = inImage[i][k];
+            if(inImage[i][k] > high)
+                high = inImage[i][k];
+        }
+    }
+
+    low += 50;
+    high -= 50;
+
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            outImage[i][k] = (inImage[i][k]-low)/(high - low)*255;
+        }
+    }
+    displayNewImage();
+}
+
+// 평활화
+function histoEq_image() { // 
+    // 중요! 출력 영상의 크기를 계산 - 기하학적 처리에서만 바뀜(회전 확대/축소 등)
+    outH = inH;
+    outW = inW;
+    // 이미지 크기의 2차원 메모리를 할당(확보)
+    outImage = new Array(outH);
+    for(var i = 0; i < outH; i++){
+        outImage[i] = new Array(outW);
+    }
+    // 캔버스 크기 지정 
+    outCanvas.height = outH;
+    outCanvas.width = outW; 
+    
+    // ** 진짜 영상처리 알고리즘 ** //
+    // 1단계 : 히스토그램 생성
+    var histo = new Array(256); // 0~255까지 픽셀 값 종류
+    for ( var i = 0; i <256; i++)// 초기화
+        histo[i] = 0;
+
+    for (var i = 0; i < inH; i++)
+        for(var k = 0; k < inW; k++)
+            histo[inImage[i][k]]++;
+    // 2단계 : 누적 히스토그램 생성
+    var sumHisto = new Array(256); // 0~255까지 픽셀 값 종류
+    for ( var i = 0; i <256; i++)// 초기화
+        sumHisto[i] = 0;
+
+    var sumValue = 0;
+    for(var i = 0; i<256; i++){
+        sumValue += histo[i];
+        sumHisto[i] = sumValue;
+    }
+
+    // 3단계 : 정규화된 누적합
+    // normal[i] = sumHisto[i] *(1/(inH*inW))*255
+
+    var normalHisto = new Array(256);
+    for ( var i = 0; i <256; i++)// 초기화
+        normalHisto[i] = 0.0;
+
+    for(var i = 0; i<256; i++){
+        normalHisto[i] = sumHisto[i] *(1.0/(inH*inW))*255.0;
+    }
+
+    // 최종 : 정규화된 히스토그램을 적용시켜서 픽셀값을 변환
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            outImage[i][k] = parseInt(normalHisto[inImage[i][k]]);
+        }
+    }
+    displayNewImage();
+}
+
+// 명세화
+function histoSpe_image() { // 
+    // 중요! 출력 영상의 크기를 계산 - 기하학적 처리에서만 바뀜(회전 확대/축소 등)
+    outH = inH;
+    outW = inW;
+    // 이미지 크기의 2차원 메모리를 할당(확보)
+    outImage = new Array(outH);
+    for(var i = 0; i < outH; i++){
+        outImage[i] = new Array(outW);
+    }
+    // 캔버스 크기 지정 
+    outCanvas.height = outH;
+    outCanvas.width = outW; 
+    
+    // ** 진짜 영상처리 알고리즘 ** //
+    // 1단계 : 히스토그램 생성
+    var histo = new Array(256); // 0~255까지 픽셀 값 종류
+    for ( var i = 0; i <256; i++)// 초기화
+        histo[i] = 0;
+
+    for (var i = 0; i < inH; i++)
+        for(var k = 0; k < inW; k++)
+            histo[inImage[i][k]]++;
+    // 2단계 : 누적 히스토그램 생성
+    var sumHisto = new Array(256); // 0~255까지 픽셀 값 종류
+    for ( var i = 0; i <256; i++)// 초기화
+        sumHisto[i] = 0;
+
+    var sumValue = 0;
+    for(var i = 0; i<256; i++){
+        sumValue += histo[i];
+        sumHisto[i] = sumValue;
+    }
+
+    // 3단계 : 정규화된 누적합
+    // normal[i] = sumHisto[i] *(1/(inH*inW))*255
+
+    var normalHisto = new Array(256);
+    for ( var i = 0; i <256; i++)// 초기화
+        normalHisto[i] = 0.0;
+
+    for(var i = 0; i<256; i++){
+        normalHisto[i] = sumHisto[i] *(1.0/(inH*inW))*255.0;
+    }
+
+    // 4단계 : 역 평활화
+    var reverse_normalHisto = new Array(256);
+    for ( var i = 0; i <256; i++)// 초기화
+        reverse_normalHisto[i] = 0.0;
+
+    for(var i = 0; i<256; i++){
+        for(var k = 0; k < 256; k++)
+            if(Math.floor(normalHisto[k]) <= i && i <= Math.ceil(normalHisto[k]))
+                reverse_normalHisto[i] = k;
+    }
+
+    // 최종 : 정규화된 히스토그램을 적용시켜서 픽셀값을 변환
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            outImage[i][k] = reverse_normalHisto[parseInt(normalHisto[inImage[i][k]])];
+        }
+    }
+    displayNewImage();
+}
+
+
+//---------- 화소영역 ----------//
+// 엠보싱
+function embos_image() {
+    // 중요! 출력 영상의 크기를 계산 - 기하학적 처리에서만 바뀜(회전 확대/축소 등)
+    outH = inH;
+    outW = inW;
+    // 이미지 크기의 2차원 메모리를 할당(확보)
+    outImage = new Array(outH);
+    for(var i = 0; i < outH; i++){
+        outImage[i] = new Array(outW);
+    }
+    // 캔버스 크기 지정 
+    outCanvas.height = outH;
+    outCanvas.width = outW; 
+    
+    // ** 진짜 영상처리 알고리즘 ** //
+    // (짱! 중요)
+    var mask = [[-1.0, 0.0, 0.0 ],
+                [ 0.0, 0.0, 0.0 ],
+                [ 0.0, 0.0, 1.0 ]];  //엠보싱 마스크
+
+    // 임시 입력 배열 (입력배열 + 2)
+    var tmpInput = new Array(inH + 2);
+    for(var i = 0; i < inH + 2; i++){
+        tmpInput[i] = new Array(inW + 2);
+    }
+
+    // 임시 입력 배열 초기화(127로)
+    for (var i = 0; i < inH+2; i++){
+        for(var k = 0; k < inW+2; k++){
+            tmpInput[i][k] = 127.0;
+        }
+    }
+
+    //원 입력 --> 임시입력 : 가운데에 넣어야 함
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            tmpInput[i+1][k+1] = parseFloat(inImage[i][k]);
+        }
+    }
+
+    // 임시 출력 배열 (출력 배열 크기 동일)
+    var tmpOutput = new Array(outH);
+    for(var i = 0; i < outH; i++){
+        tmpOutput[i] = new Array(outW);
+    }
+
+    //*** 회선 연산 ***
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            // 한 점에 대해서 처리
+            var S = 0.0;
+            for(var m=0; m<3; m++){
+                for(var n=0; n<3; n++){
+                    S += tmpInput[i+m][k+n] * mask[m][n];
+                }
+            } 
+            tmpOutput[i][k] = S;       
+        }
+    }
+    // 후처리 : 마스크 합계가 0이라면 127 정도를 더하기.
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            tmpOutput[i][k] += 127.0;
+        }
+    }
+    // 임시 출력 -> 원 출력
+    for (var i = 0; i < outH; i++){
+        for(var k = 0; k < outW; k++){
+            outImage[i][k] = parseInt(tmpOutput[i][k]);;
+        }
+    }
+    displayNewImage();
+}
+
+// 엠보싱2
+function embos2_image() {
+    // 중요! 출력 영상의 크기를 계산 - 기하학적 처리에서만 바뀜(회전 확대/축소 등)
+    outH = inH;
+    outW = inW;
+    // 이미지 크기의 2차원 메모리를 할당(확보)
+    outImage = new Array(outH);
+    for(var i = 0; i < outH; i++){
+        outImage[i] = new Array(outW);
+    }
+    // 캔버스 크기 지정 
+    outCanvas.height = outH;
+    outCanvas.width = outW; 
+    
+    // ** 진짜 영상처리 알고리즘 ** //
+    // (짱! 중요)
+    var mask = [[-1.0, -1.0, -1.0 ],
+                [ 1.0,  0.0, -1.0 ],
+                [ 1.0,  1.0,  1.0 ]];  //엠보싱 마스크
+
+    // 임시 입력 배열 (입력배열 + 2)
+    var tmpInput = new Array(inH + 2);
+    for(var i = 0; i < inH + 2; i++){
+        tmpInput[i] = new Array(inW + 2);
+    }
+
+    // 임시 입력 배열 초기화(127로)
+    for (var i = 0; i < inH+2; i++){
+        for(var k = 0; k < inW+2; k++){
+            tmpInput[i][k] = 127.0;
+        }
+    }
+
+    //원 입력 --> 임시입력 : 가운데에 넣어야 함
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            tmpInput[i+1][k+1] = parseFloat(inImage[i][k]);
+        }
+    }
+
+    // 임시 출력 배열 (출력 배열 크기 동일)
+    var tmpOutput = new Array(outH);
+    for(var i = 0; i < outH; i++){
+        tmpOutput[i] = new Array(outW);
+    }
+
+    //*** 회선 연산 ***
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            // 한 점에 대해서 처리
+            var S = 0.0;
+            for(var m=0; m<3; m++){
+                for(var n=0; n<3; n++){
+                    S += tmpInput[i+m][k+n] * mask[m][n];
+                }
+            } 
+            tmpOutput[i][k] = S;       
+        }
+    }
+    // 후처리 : 마스크 합계가 0이라면 127 정도를 더하기.
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            tmpOutput[i][k] += 127.0;
+        }
+    }
+
+    // 임시 출력 -> 원 출력
+    for (var i = 0; i < outH; i++){
+        for(var k = 0; k < outW; k++){
+            outImage[i][k] = parseInt(tmpOutput[i][k]);;
+        }
+    }
+    displayNewImage();
+}
+
+// 블러링
+function blur_image() {
+    // 중요! 출력 영상의 크기를 계산 - 기하학적 처리에서만 바뀜(회전 확대/축소 등)
+    outH = inH;
+    outW = inW;
+    // 이미지 크기의 2차원 메모리를 할당(확보)
+    outImage = new Array(outH);
+    for(var i = 0; i < outH; i++){
+        outImage[i] = new Array(outW);
+    }
+    // 캔버스 크기 지정 
+    outCanvas.height = outH;
+    outCanvas.width = outW; 
+    
+    // ** 진짜 영상처리 알고리즘 ** //
+    // (짱! 중요)
+    var mask = [[ 1/9., 1/9., 1/9. ],
+                [ 1/9., 1/9., 1/9. ],
+                [ 1/9., 1/9., 1/9. ]];  //블러 마스크
+
+    // 임시 입력 배열 (입력배열 + 2)
+    var tmpInput = new Array(inH + 2);
+    for(var i = 0; i < inH + 2; i++){
+        tmpInput[i] = new Array(inW + 2);
+    }
+
+    // 임시 입력 배열 초기화(127로)
+    for (var i = 0; i < inH+2; i++){
+        for(var k = 0; k < inW+2; k++){
+            tmpInput[i][k] = 127.0;
+        }
+    }
+
+    //원 입력 --> 임시입력 : 가운데에 넣어야 함
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            tmpInput[i+1][k+1] = parseFloat(inImage[i][k]);
+        }
+    }
+
+    // 임시 출력 배열 (출력 배열 크기 동일)
+    var tmpOutput = new Array(outH);
+    for(var i = 0; i < outH; i++){
+        tmpOutput[i] = new Array(outW);
+    }
+
+    //*** 회선 연산 ***
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            // 한 점에 대해서 처리
+            var S = 0.0;
+            for(var m=0; m<3; m++){
+                for(var n=0; n<3; n++){
+                    S += tmpInput[i+m][k+n] * mask[m][n];
+                }
+            } 
+            tmpOutput[i][k] = S;       
+        }
+    }
+
+
+    // 임시 출력 -> 원 출력
+    for (var i = 0; i < outH; i++){
+        for(var k = 0; k < outW; k++){
+            outImage[i][k] = parseInt(tmpOutput[i][k]);;
+        }
+    }
+    displayNewImage();
+}
+
+// 진한블러링
+function bigblur_image() {
+    // 중요! 출력 영상의 크기를 계산 - 기하학적 처리에서만 바뀜(회전 확대/축소 등)
+    outH = inH;
+    outW = inW;
+    // 이미지 크기의 2차원 메모리를 할당(확보)
+    outImage = new Array(outH);
+    for(var i = 0; i < outH; i++){
+        outImage[i] = new Array(outW);
+    }
+    // 캔버스 크기 지정 
+    outCanvas.height = outH;
+    outCanvas.width = outW; 
+    
+    // ** 진짜 영상처리 알고리즘 ** //
+    // (짱! 중요)
+    var mask = [[ 1/25.0, 1/25.0, 1/25.0, 1/25.0, 1/25.0 ],
+                [ 1/25.0, 1/25.0, 1/25.0, 1/25.0, 1/25.0 ],
+                [ 1/25.0, 1/25.0, 1/25.0, 1/25.0, 1/25.0 ],
+                [ 1/25.0, 1/25.0, 1/25.0, 1/25.0, 1/25.0 ],
+                [ 1/25.0, 1/25.0, 1/25.0, 1/25.0, 1/25.0 ]];
+
+    // 임시 입력 배열 (입력배열 + 2)
+    var tmpInput = new Array(inH +4);
+    for(var i = 0; i < inH + 4; i++){
+        tmpInput[i] = new Array(inW + 4);
+    }
+
+    // 임시 입력 배열 초기화(127로)
+    for (var i = 0; i < inH+4; i++){
+        for(var k = 0; k < inW+4; k++){
+            tmpInput[i][k] = 127.0;
+        }
+    }
+
+    //원 입력 --> 임시입력 : 가운데에 넣어야 함
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            tmpInput[i+2][k+2] = parseFloat(inImage[i][k]);
+        }
+    }
+
+    // 임시 출력 배열 (출력 배열 크기 동일)
+    var tmpOutput = new Array(outH);
+    for(var i = 0; i < outH; i++){
+        tmpOutput[i] = new Array(outW);
+    }
+
+    //*** 회선 연산 ***
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            // 한 점에 대해서 처리
+            var S = 0.0;
+            for(var m=0; m<5; m++){
+                for(var n=0; n<5; n++){
+                    S += tmpInput[i+m][k+n] * mask[m][n];
+                }
+            } 
+            tmpOutput[i][k] = S;       
+        }
+    }
+    // 임시 출력 -> 원 출력
+    for (var i = 0; i < outH; i++){
+        for(var k = 0; k < outW; k++){
+            outImage[i][k] = parseInt(tmpOutput[i][k]);;
+        }
+    }
+    displayNewImage();
+}
+
+// 블러링강도 선택
+function chooseBlur_image() {
+    // 중요! 출력 영상의 크기를 계산 - 기하학적 처리에서만 바뀜(회전 확대/축소 등)
+    outH = inH;
+    outW = inW;
+    // 이미지 크기의 2차원 메모리를 할당(확보)
+    outImage = new Array(outH);
+    for(var i = 0; i < outH; i++){
+        outImage[i] = new Array(outW);
+    }
+    // 캔버스 크기 지정 
+    outCanvas.height = outH;
+    outCanvas.width = outW; 
+    
+    // ** 진짜 영상처리 알고리즘 ** //
+    // (짱! 중요)
+    var num = parseFloat(prompt("블러링 강도", "클수록 진한블러링(홀수): 3"));
+    var mask = new Array();
+
+    var mask = new Array(inH +(num-1));
+    for(var i = 0; i < inH + 4; i++){
+        mask[i] = new Array(inW + (num-1));
+    }
+
+    for (var i = 0; i < parseInt(num); i++){
+        for(var k = 0; k < parseInt(num); k++){
+            mask[i][k] = 0;
+        }
+    }
+
+    for (var i = 0; i < parseInt(num); i++){
+        for(var k = 0; k < parseInt(num); k++){
+            mask[i][k] = parseFloat(1/Math.pow(parseFloat(num),2));
+        }
+    }
+
+
+    // 임시 입력 배열 (입력배열 + 2)
+    var tmpInput = new Array(inH +(num-1));
+    for(var i = 0; i < inH + (num-1); i++){
+        tmpInput[i] = new Array(inW + (num-1));
+    }
+
+    // 임시 입력 배열 초기화(127로)
+    for (var i = 0; i < inH+(num-1); i++){
+        for(var k = 0; k < inW+(num-1); k++){
+            tmpInput[i][k] = 127.0;
+        }
+    }
+
+    //원 입력 --> 임시입력 : 가운데에 넣어야 함
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            tmpInput[i+((num-1)/2)][k+((num-1)/2)] = parseFloat(inImage[i][k]);
+        }
+    }
+
+    // 임시 출력 배열 (출력 배열 크기 동일)
+    var tmpOutput = new Array(outH);
+    for(var i = 0; i < outH; i++){
+        tmpOutput[i] = new Array(outW);
+    }
+
+    //*** 회선 연산 ***
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            // 한 점에 대해서 처리
+            var S = 0.0;
+            for(var m=0; m<num; m++){
+                for(var n=0; n<num; n++){
+                    S += tmpInput[i+m][k+n] * mask[m][n];
+                }
+            } 
+            tmpOutput[i][k] = S;       
+        }
+    }
+    // 임시 출력 -> 원 출력
+    for (var i = 0; i < outH; i++){
+        for(var k = 0; k < outW; k++){
+            outImage[i][k] = parseInt(tmpOutput[i][k]);;
+        }
+    }
+    displayNewImage();
+}
+
+// 경계선 (프리윗)
+function edgeP_image() {
+    // 중요! 출력 영상의 크기를 계산 - 기하학적 처리에서만 바뀜(회전 확대/축소 등)
+    outH = inH;
+    outW = inW;
+    // 이미지 크기의 2차원 메모리를 할당(확보)
+    outImage = new Array(outH);
+    for(var i = 0; i < outH; i++){
+        outImage[i] = new Array(outW);
+    }
+    // 캔버스 크기 지정 
+    outCanvas.height = outH;
+    outCanvas.width = outW; 
+    
+    // ** 진짜 영상처리 알고리즘 ** //
+    // (짱! 중요)
+    var mask = [[ 0.0, -1.0, -2.0 ],
+                [ 1.0,  0.0, -1.0 ],
+                [ 2.0,  1.0,  0.0 ]];  //프리윗 수평+수직 마스크
+
+    // 임시 입력 배열 (입력배열 + 2)
+    var tmpInput = new Array(inH + 2);
+    for(var i = 0; i < inH + 2; i++){
+        tmpInput[i] = new Array(inW + 2);
+    }
+
+    // 임시 입력 배열 초기화(127로)
+    for (var i = 0; i < inH+2; i++){
+        for(var k = 0; k < inW+2; k++){
+            tmpInput[i][k] = 127.0;
+        }
+    }
+
+    //원 입력 --> 임시입력 : 가운데에 넣어야 함
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            tmpInput[i+1][k+1] = parseFloat(inImage[i][k]);
+        }
+    }
+
+    // 임시 출력 배열 (출력 배열 크기 동일)
+    var tmpOutput = new Array(outH);
+    for(var i = 0; i < outH; i++){
+        tmpOutput[i] = new Array(outW);
+    }
+
+    //*** 회선 연산 ***
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            // 한 점에 대해서 처리
+            var S = 0.0;
+            for(var m=0; m<3; m++){
+                for(var n=0; n<3; n++){
+                    S += tmpInput[i+m][k+n] * mask[m][n];
+                }
+            } 
+            tmpOutput[i][k] = S;       
+        }
+    }
+    // // 후처리 : 마스크 합계가 0이라면 127 정도를 더하기.
+    // for (var i = 0; i < inH; i++){
+    //     for(var k = 0; k < inW; k++){
+    //         tmpOutput[i][k] += 127.0;
+    //     }
+    // }
+    // 임시 출력 -> 원 출력
+    for (var i = 0; i < outH; i++){
+        for(var k = 0; k < outW; k++){
+            outImage[i][k] = parseInt(tmpOutput[i][k]);;
+        }
+    }
+    displayNewImage();
+}
+
+// 경게선 - 로버츠
+function edgeR_image() {
+    // 중요! 출력 영상의 크기를 계산 - 기하학적 처리에서만 바뀜(회전 확대/축소 등)
+    outH = inH;
+    outW = inW;
+    // 이미지 크기의 2차원 메모리를 할당(확보)
+    outImage = new Array(outH);
+    for(var i = 0; i < outH; i++){
+        outImage[i] = new Array(outW);
+    }
+    // 캔버스 크기 지정 
+    outCanvas.height = outH;
+    outCanvas.width = outW; 
+    
+    // ** 진짜 영상처리 알고리즘 ** //
+    // (짱! 중요)
+    var mask = [[-1.0, 0.0, -1.0 ],
+                [ 0.0, 2.0,  0.0 ],
+                [ 0.0, 0.0,  0.0 ]];  //로버츠 수평+수직 마스크
+
+    // 임시 입력 배열 (입력배열 + 2)
+    var tmpInput = new Array(inH + 2);
+    for(var i = 0; i < inH + 2; i++){
+        tmpInput[i] = new Array(inW + 2);
+    }
+
+    // 임시 입력 배열 초기화(127로)
+    for (var i = 0; i < inH+2; i++){
+        for(var k = 0; k < inW+2; k++){
+            tmpInput[i][k] = 127.0;
+        }
+    }
+
+    //원 입력 --> 임시입력 : 가운데에 넣어야 함
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            tmpInput[i+1][k+1] = parseFloat(inImage[i][k]);
+        }
+    }
+
+    // 임시 출력 배열 (출력 배열 크기 동일)
+    var tmpOutput = new Array(outH);
+    for(var i = 0; i < outH; i++){
+        tmpOutput[i] = new Array(outW);
+    }
+
+    //*** 회선 연산 ***
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            // 한 점에 대해서 처리
+            var S = 0.0;
+            for(var m=0; m<3; m++){
+                for(var n=0; n<3; n++){
+                    S += tmpInput[i+m][k+n] * mask[m][n];
+                }
+            } 
+            tmpOutput[i][k] = S;       
+        }
+    }
+    // // 후처리 : 마스크 합계가 0이라면 127 정도를 더하기.
+    // for (var i = 0; i < inH; i++){
+    //     for(var k = 0; k < inW; k++){
+    //         tmpOutput[i][k] += 127.0;
+    //     }
+    // }
+    // 임시 출력 -> 원 출력
+    for (var i = 0; i < outH; i++){
+        for(var k = 0; k < outW; k++){
+            outImage[i][k] = parseInt(tmpOutput[i][k]);;
+        }
+    }
+    displayNewImage();
+}
+
+// 샤프닝1
+function sharpe_image() {
+    // 중요! 출력 영상의 크기를 계산 - 기하학적 처리에서만 바뀜(회전 확대/축소 등)
+    outH = inH;
+    outW = inW;
+    // 이미지 크기의 2차원 메모리를 할당(확보)
+    outImage = new Array(outH);
+    for(var i = 0; i < outH; i++){
+        outImage[i] = new Array(outW);
+    }
+    // 캔버스 크기 지정 
+    outCanvas.height = outH;
+    outCanvas.width = outW; 
+    
+    // ** 진짜 영상처리 알고리즘 ** //
+    // (짱! 중요)
+    var mask = [[  0., -1.,  0. ],
+                [ -1.,  5., -1. ],
+                [  0., -1.,  0. ]];  //샤프닝 마스크
+
+    // 임시 입력 배열 (입력배열 + 2)
+    var tmpInput = new Array(inH + 2);
+    for(var i = 0; i < inH + 2; i++){
+        tmpInput[i] = new Array(inW + 2);
+    }
+
+    // 임시 입력 배열 초기화(127로)
+    for (var i = 0; i < inH+2; i++){
+        for(var k = 0; k < inW+2; k++){
+            tmpInput[i][k] = 127.0;
+        }
+    }
+
+    //원 입력 --> 임시입력 : 가운데에 넣어야 함
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            tmpInput[i+1][k+1] = parseFloat(inImage[i][k]);
+        }
+    }
+
+    // 임시 출력 배열 (출력 배열 크기 동일)
+    var tmpOutput = new Array(outH);
+    for(var i = 0; i < outH; i++){
+        tmpOutput[i] = new Array(outW);
+    }
+
+    //*** 회선 연산 ***
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            // 한 점에 대해서 처리
+            var S = 0.0;
+            for(var m=0; m<3; m++){
+                for(var n=0; n<3; n++){
+                    S += tmpInput[i+m][k+n] * mask[m][n];
+                }
+            } 
+            tmpOutput[i][k] = S;       
+        }
+    }
+    // // 후처리 : 마스크 합계가 0이라면 127 정도를 더하기.
+    // for (var i = 0; i < inH; i++){
+    //     for(var k = 0; k < inW; k++){
+    //         tmpOutput[i][k] += 127.0;
+    //     }
+    // }
+    // 임시 출력 -> 원 출력
+    for (var i = 0; i < outH; i++){
+        for(var k = 0; k < outW; k++){
+            outImage[i][k] = parseInt(tmpOutput[i][k]);;
+        }
+    }
+    displayNewImage();
+}
+
+// 샤프닝2
+function sharpe_image2() {
+    // 중요! 출력 영상의 크기를 계산 - 기하학적 처리에서만 바뀜(회전 확대/축소 등)
+    outH = inH;
+    outW = inW;
+    // 이미지 크기의 2차원 메모리를 할당(확보)
+    outImage = new Array(outH);
+    for(var i = 0; i < outH; i++){
+        outImage[i] = new Array(outW);
+    }
+    // 캔버스 크기 지정 
+    outCanvas.height = outH;
+    outCanvas.width = outW; 
+    
+    // ** 진짜 영상처리 알고리즘 ** //
+    // (짱! 중요)
+    var mask = [[  0., -1.,  0. ],
+                [ -1.,  9., -1. ],
+                [  0., -1.,  0. ]];  //샤프닝 마스크
+
+    // 임시 입력 배열 (입력배열 + 2)
+    var tmpInput = new Array(inH + 2);
+    for(var i = 0; i < inH + 2; i++){
+        tmpInput[i] = new Array(inW + 2);
+    }
+
+    // 임시 입력 배열 초기화(127로)
+    for (var i = 0; i < inH+2; i++){
+        for(var k = 0; k < inW+2; k++){
+            tmpInput[i][k] = 127.0;
+        }
+    }
+
+    //원 입력 --> 임시입력 : 가운데에 넣어야 함
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            tmpInput[i+1][k+1] = parseFloat(inImage[i][k]);
+        }
+    }
+
+    // 임시 출력 배열 (출력 배열 크기 동일)
+    var tmpOutput = new Array(outH);
+    for(var i = 0; i < outH; i++){
+        tmpOutput[i] = new Array(outW);
+    }
+
+    //*** 회선 연산 ***
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            // 한 점에 대해서 처리
+            var S = 0.0;
+            for(var m=0; m<3; m++){
+                for(var n=0; n<3; n++){
+                    S += tmpInput[i+m][k+n] * mask[m][n];
+                }
+            } 
+            tmpOutput[i][k] = S;       
+        }
+    }
+    // // 후처리 : 마스크 합계가 0이라면 127 정도를 더하기.
+    // for (var i = 0; i < inH; i++){
+    //     for(var k = 0; k < inW; k++){
+    //         tmpOutput[i][k] += 127.0;
+    //     }
+    // }
+    // 임시 출력 -> 원 출력
+    for (var i = 0; i < outH; i++){
+        for(var k = 0; k < outW; k++){
+            outImage[i][k] = parseInt(tmpOutput[i][k]);;
+        }
+    }
+    displayNewImage();
+}
+
+// 샤프닝3
+function sharpe_image3() {
+    // 중요! 출력 영상의 크기를 계산 - 기하학적 처리에서만 바뀜(회전 확대/축소 등)
+    outH = inH;
+    outW = inW;
+    // 이미지 크기의 2차원 메모리를 할당(확보)
+    outImage = new Array(outH);
+    for(var i = 0; i < outH; i++){
+        outImage[i] = new Array(outW);
+    }
+    // 캔버스 크기 지정 
+    outCanvas.height = outH;
+    outCanvas.width = outW; 
+    
+    // ** 진짜 영상처리 알고리즘 ** //
+    // (짱! 중요)
+    var mask = [[  1., -2.,  1. ],
+                [ -2.,  5., -2. ],
+                [  1., -2.,  1. ]];  //샤프닝 마스크
+
+    // 임시 입력 배열 (입력배열 + 2)
+    var tmpInput = new Array(inH + 2);
+    for(var i = 0; i < inH + 2; i++){
+        tmpInput[i] = new Array(inW + 2);
+    }
+
+    // 임시 입력 배열 초기화(127로)
+    for (var i = 0; i < inH+2; i++){
+        for(var k = 0; k < inW+2; k++){
+            tmpInput[i][k] = 127.0;
+        }
+    }
+
+    //원 입력 --> 임시입력 : 가운데에 넣어야 함
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            tmpInput[i+1][k+1] = parseFloat(inImage[i][k]);
+        }
+    }
+
+    // 임시 출력 배열 (출력 배열 크기 동일)
+    var tmpOutput = new Array(outH);
+    for(var i = 0; i < outH; i++){
+        tmpOutput[i] = new Array(outW);
+    }
+
+    //*** 회선 연산 ***
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            // 한 점에 대해서 처리
+            var S = 0.0;
+            for(var m=0; m<3; m++){
+                for(var n=0; n<3; n++){
+                    S += tmpInput[i+m][k+n] * mask[m][n];
+                }
+            } 
+            tmpOutput[i][k] = S;       
+        }
+    }
+    // // 후처리 : 마스크 합계가 0이라면 127 정도를 더하기.
+    // for (var i = 0; i < inH; i++){
+    //     for(var k = 0; k < inW; k++){
+    //         tmpOutput[i][k] += 127.0;
+    //     }
+    // }
+    // 임시 출력 -> 원 출력
+    for (var i = 0; i < outH; i++){
+        for(var k = 0; k < outW; k++){
+            outImage[i][k] = parseInt(tmpOutput[i][k]);;
+        }
+    }
+    displayNewImage();
+}
+
+// 고주파 샤프닝
+function Hsharpe_image() {
+    // 중요! 출력 영상의 크기를 계산 - 기하학적 처리에서만 바뀜(회전 확대/축소 등)
+    outH = inH;
+    outW = inW;
+    // 이미지 크기의 2차원 메모리를 할당(확보)
+    outImage = new Array(outH);
+    for(var i = 0; i < outH; i++){
+        outImage[i] = new Array(outW);
+    }
+    // 캔버스 크기 지정 
+    outCanvas.height = outH;
+    outCanvas.width = outW; 
+    
+    // ** 진짜 영상처리 알고리즘 ** //
+    // (짱! 중요)
+    var mask = [[ -1/9., -1/9.,  -1/9. ],
+                [ -1/9.,  8/9.,  -1/9. ],
+                [ -1/9., -1/9.,  -1/9. ]];  //고주파샤프닝 마스크
+
+    // 임시 입력 배열 (입력배열 + 2)
+    var tmpInput = new Array(inH + 2);
+    for(var i = 0; i < inH + 2; i++){
+        tmpInput[i] = new Array(inW + 2);
+    }
+
+    // 임시 입력 배열 초기화(127로)
+    for (var i = 0; i < inH+2; i++){
+        for(var k = 0; k < inW+2; k++){
+            tmpInput[i][k] = 127.0;
+        }
+    }
+
+    //원 입력 --> 임시입력 : 가운데에 넣어야 함
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            tmpInput[i+1][k+1] = parseFloat(inImage[i][k]);
+        }
+    }
+
+    // 임시 출력 배열 (출력 배열 크기 동일)
+    var tmpOutput = new Array(outH);
+    for(var i = 0; i < outH; i++){
+        tmpOutput[i] = new Array(outW);
+    }
+
+    //*** 회선 연산 ***
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            // 한 점에 대해서 처리
+            var S = 0.0;
+            for(var m=0; m<3; m++){
+                for(var n=0; n<3; n++){
+                    S +=  100 * tmpInput[i+m][k+n] * mask[m][n];
+                }
+            } 
+            tmpOutput[i][k] = S;       
+        }
+    }
+    // // 후처리 : 마스크 합계가 0이라면 127 정도를 더하기.
+    // for (var i = 0; i < inH; i++){
+    //     for(var k = 0; k < inW; k++){
+    //         tmpOutput[i][k] += 127.0;
+    //     }
+    // }
+    // 임시 출력 -> 원 출력
+    for (var i = 0; i < outH; i++){
+        for(var k = 0; k < outW; k++){
+            outImage[i][k] = parseInt(tmpOutput[i][k]);;
+        }
+    }
+    displayNewImage();
+}
+
+// 가우시안 보정
+function gaunisian_image() {
+    // 중요! 출력 영상의 크기를 계산 - 기하학적 처리에서만 바뀜(회전 확대/축소 등)
+    outH = inH;
+    outW = inW;
+    // 이미지 크기의 2차원 메모리를 할당(확보)
+    outImage = new Array(outH);
+    for(var i = 0; i < outH; i++){
+        outImage[i] = new Array(outW);
+    }
+    // 캔버스 크기 지정 
+    outCanvas.height = outH;
+    outCanvas.width = outW; 
+    
+    // ** 진짜 영상처리 알고리즘 ** //
+    // (짱! 중요)
+    var mask = [[ 1/16., 1/8.,  1/16. ],
+                [  1/8., 1/4.,   1/8. ],
+                [ 1/16., 1/8.,  1/16. ]];  //가우시안 마스크
+
+    // 임시 입력 배열 (입력배열 + 2)
+    var tmpInput = new Array(inH + 2);
+    for(var i = 0; i < inH + 2; i++){
+        tmpInput[i] = new Array(inW + 2);
+    }
+
+    // 임시 입력 배열 초기화(127로)
+    for (var i = 0; i < inH+2; i++){
+        for(var k = 0; k < inW+2; k++){
+            tmpInput[i][k] = 127.0;
+        }
+    }
+
+    //원 입력 --> 임시입력 : 가운데에 넣어야 함
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            tmpInput[i+1][k+1] = parseFloat(inImage[i][k]);
+        }
+    }
+
+    // 임시 출력 배열 (출력 배열 크기 동일)
+    var tmpOutput = new Array(outH);
+    for(var i = 0; i < outH; i++){
+        tmpOutput[i] = new Array(outW);
+    }
+
+    //*** 회선 연산 ***
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            // 한 점에 대해서 처리
+            var S = 0.0;
+            for(var m=0; m<3; m++){
+                for(var n=0; n<3; n++){
+                    S +=  tmpInput[i+m][k+n] * mask[m][n];
+                }
+            } 
+            tmpOutput[i][k] = S;       
+        }
+    }
+    // // 후처리 : 마스크 합계가 0이라면 127 정도를 더하기.
+    // for (var i = 0; i < inH; i++){
+    //     for(var k = 0; k < inW; k++){
+    //         tmpOutput[i][k] += 127.0;
+    //     }
+    // }
+    // 임시 출력 -> 원 출력
+    for (var i = 0; i < outH; i++){
+        for(var k = 0; k < outW; k++){
+            outImage[i][k] = parseInt(tmpOutput[i][k]);;
+        }
+    }
+    displayNewImage();
+}
+
+// 유사연산자
+function Homogeneity_image() {
+    // 중요! 출력 영상의 크기를 계산 - 기하학적 처리에서만 바뀜(회전 확대/축소 등)
+    outH = inH;
+    outW = inW;
+    // 이미지 크기의 2차원 메모리를 할당(확보)
+    outImage = new Array(outH);
+    for(var i = 0; i < outH; i++){
+        outImage[i] = new Array(outW);
+    }
+    // 캔버스 크기 지정 
+    outCanvas.height = outH;
+    outCanvas.width = outW; 
+    
+    // ** 진짜 영상처리 알고리즘 ** //
+
+    // 임시 입력 배열 (입력배열 + 2)
+    var tmpInput = new Array(inH + 2);
+    for(var i = 0; i < inH + 2; i++){
+        tmpInput[i] = new Array(inW + 2);
+    }
+
+    // 임시 입력 배열 초기화(127로)
+    for (var i = 0; i < inH+2; i++){
+        for(var k = 0; k < inW+2; k++){
+            tmpInput[i][k] = 127.0;
+        }
+    }
+
+    //원 입력 --> 임시입력 : 가운데에 넣어야 함
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            tmpInput[i+1][k+1] = parseFloat(inImage[i][k]);
+        }
+    }
+
+    // 임시 출력 배열 (출력 배열 크기 동일)
+    var tmpOutput = new Array(outH);
+    for(var i = 0; i < outH; i++){
+        tmpOutput[i] = new Array(outW);
+    }
+
+    //*** 회선 연산 ***
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            // 한 점에 대해서 처리
+            var result = 0.0;
+            for(var m=0; m<3; m++){
+                for(var n=0; n<3; n++){
+                    var max = 0.0;
+                    max = Math.abs(tmpInput[i+1][k+1] - tmpInput[i+m][k+n]);
+                    if(max >= result)
+                        result = max;
+                }
+            } 
+         tmpOutput[i][k] = result;     
+            if (tmpOutput[i][k] >= 255)
+                tmpOutput[i][k] = 255;
+            if (tmpOutput[i][k] <= 0)
+                tmpOutput[i][k] = 0;
+
+        }
+    }
+    // // 후처리 : 마스크 합계가 0이라면 127 정도를 더하기.
+    // for (var i = 0; i < inH; i++){
+    //     for(var k = 0; k < inW; k++){
+    //         tmpOutput[i][k] += 127.0;
+    //     }
+    // }
+    // 임시 출력 -> 원 출력
+    for (var i = 0; i < outH; i++){
+        for(var k = 0; k < outW; k++){
+            outImage[i][k] = parseInt(tmpOutput[i][k]);;
+        }
+    }
+    displayNewImage();
+}
+
+// 차 연산자
+function Differ_image() {
+    // 중요! 출력 영상의 크기를 계산 - 기하학적 처리에서만 바뀜(회전 확대/축소 등)
+    outH = inH;
+    outW = inW;
+    // 이미지 크기의 2차원 메모리를 할당(확보)
+    outImage = new Array(outH);
+    for(var i = 0; i < outH; i++){
+        outImage[i] = new Array(outW);
+    }
+    // 캔버스 크기 지정 
+    outCanvas.height = outH;
+    outCanvas.width = outW; 
+    
+    // ** 진짜 영상처리 알고리즘 ** //
+
+    // 임시 입력 배열 (입력배열 + 2)
+    var tmpInput = new Array(inH + 2);
+    for(var i = 0; i < inH + 2; i++){
+        tmpInput[i] = new Array(inW + 2);
+    }
+
+    // 임시 입력 배열 초기화(127로)
+    for (var i = 0; i < inH+2; i++){
+        for(var k = 0; k < inW+2; k++){
+            tmpInput[i][k] = 127.0;
+        }
+    }
+
+    //원 입력 --> 임시입력 : 가운데에 넣어야 함
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            tmpInput[i+1][k+1] = parseFloat(inImage[i][k]);
+        }
+    }
+
+    // 임시 출력 배열 (출력 배열 크기 동일)
+    var tmpOutput = new Array(outH);
+    for(var i = 0; i < outH; i++){
+        tmpOutput[i] = new Array(outW);
+    }
+
+    //*** 회선 연산 ***
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            // 한 점에 대해서 처리
+            var result = 0.0;
+            var d1 = [0,0,0,1];
+            var d2 = [0,2,1,2];
+            for(var m=0; m<3; m++){
+                    var max = 0.0;
+                    max = Math.abs(tmpInput[i+d1[m]][k+d2[m]] - tmpInput[i-d1[m]][k-d2[m]]);
+                    if(max >= result)
+                        result = max;
+            } 
+         tmpOutput[i][k] = result;     
+            if (tmpOutput[i][k] >= 255)
+                tmpOutput[i][k] = 255;
+            if (tmpOutput[i][k] <= 0)
+                tmpOutput[i][k] = 0;
+
+        }
+    }
+    // // 후처리 : 마스크 합계가 0이라면 127 정도를 더하기.
+    // for (var i = 0; i < inH; i++){
+    //     for(var k = 0; k < inW; k++){
+    //         tmpOutput[i][k] += 127.0;
+    //     }
+    // }
+    // 임시 출력 -> 원 출력
+    for (var i = 0; i < outH; i++){
+        for(var k = 0; k < outW; k++){
+            outImage[i][k] = parseInt(tmpOutput[i][k]);;
+        }
+    }
+    displayNewImage();
+}
+
+// LoG 
+function LoG_image() {
+    // 중요! 출력 영상의 크기를 계산 - 기하학적 처리에서만 바뀜(회전 확대/축소 등)
+    outH = inH;
+    outW = inW;
+    // 이미지 크기의 2차원 메모리를 할당(확보)
+    outImage = new Array(outH);
+    for(var i = 0; i < outH; i++){
+        outImage[i] = new Array(outW);
+    }
+    // 캔버스 크기 지정 
+    outCanvas.height = outH;
+    outCanvas.width = outW; 
+    
+    // ** 진짜 영상처리 알고리즘 ** //
+    // (짱! 중요)
+    var mask = [[ 0.0,  0.0, -1.0,  0.0,  0.0 ],
+                [ 0.0, -1.0, -2.0, -1.0,  0.0 ],
+                [-1.0, -2.0,  16., -2.0, -1.0 ],
+                [ 0.0, -1.0, -2.0, -1.0,  0.0 ],
+                [ 0.0,  0.0, -1.0,  0.0,  0.0 ]];
+
+    // 임시 입력 배열 (입력배열 + 2)
+    var tmpInput = new Array(inH +4);
+    for(var i = 0; i < inH + 4; i++){
+        tmpInput[i] = new Array(inW + 4);
+    }
+
+    // 임시 입력 배열 초기화(127로)
+    for (var i = 0; i < inH+4; i++){
+        for(var k = 0; k < inW+4; k++){
+            tmpInput[i][k] = 127.0;
+        }
+    }
+
+    //원 입력 --> 임시입력 : 가운데에 넣어야 함
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            tmpInput[i+2][k+2] = parseFloat(inImage[i][k]);
+        }
+    }
+
+    // 임시 출력 배열 (출력 배열 크기 동일)
+    var tmpOutput = new Array(outH);
+    for(var i = 0; i < outH; i++){
+        tmpOutput[i] = new Array(outW);
+    }
+
+    //*** 회선 연산 ***
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            // 한 점에 대해서 처리
+            var S = 0.0;
+            for(var m=0; m<5; m++){
+                for(var n=0; n<5; n++){
+                    S += tmpInput[i+m][k+n] * mask[m][n];
+                }
+            } 
+            tmpOutput[i][k] = S;       
+        }
+    }
+
+    // 임시 출력 -> 원 출력
+    for (var i = 0; i < outH; i++){
+        for(var k = 0; k < outW; k++){
+            outImage[i][k] = parseInt(tmpOutput[i][k]);;
+        }
+    }
+    displayNewImage();
+}
+
+// DoG (7x7)
+function DoG7_image() {
+    // 중요! 출력 영상의 크기를 계산 - 기하학적 처리에서만 바뀜(회전 확대/축소 등)
+    outH = inH;
+    outW = inW;
+    // 이미지 크기의 2차원 메모리를 할당(확보)
+    outImage = new Array(outH);
+    for(var i = 0; i < outH; i++){
+        outImage[i] = new Array(outW);
+    }
+    // 캔버스 크기 지정 
+    outCanvas.height = outH;
+    outCanvas.width = outW; 
+    
+    // ** 진짜 영상처리 알고리즘 ** //
+    // (짱! 중요)
+    var mask = [[ 0.0,  0.0, -1.0, -1.0, -1.0,  0.0,  0.0],
+                [ 0.0, -2.0, -3.0, -3.0, -3.0, -2.0,  0.0],
+                [-1.0, -3.0,  5.0,  5.0,  5.0, -3.0, -1.0],
+                [-1.0, -3.0,  5.0, 16.0,  5.0, -3.0, -1.0],
+                [-1.0,  3.0,  5.0,  5.0,  5.0, -3.0, -1.0],
+                [ 0.0, -2.0, -3.0, -3.0, -3.0, -2.0,  0.0],
+                [ 0.0,  0.0, -1.0, -1.0,  1.0,  0.0,  0.0]];
+
+    // 임시 입력 배열 (입력배열 + 2)
+    var tmpInput = new Array(inH +6);
+    for(var i = 0; i < inH + 6; i++){
+        tmpInput[i] = new Array(inW + 6);
+    }
+
+    // 임시 입력 배열 초기화(127로)
+    for (var i = 0; i < inH + 6; i++){
+        for(var k = 0; k < inW + 6; k++){
+            tmpInput[i][k] = 127.0;
+        }
+    }
+
+    //원 입력 --> 임시입력 : 가운데에 넣어야 함
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            tmpInput[i+3][k+3] = parseFloat(inImage[i][k]);
+        }
+    }
+
+    // 임시 출력 배열 (출력 배열 크기 동일)
+    var tmpOutput = new Array(outH);
+    for(var i = 0; i < outH; i++){
+        tmpOutput[i] = new Array(outW);
+    }
+
+    //*** 회선 연산 ***
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            // 한 점에 대해서 처리
+            var S = 0.0;
+            for(var m=0; m<7; m++){
+                for(var n=0; n<7; n++){
+                    S += tmpInput[i+m][k+n] * mask[m][n];
+                }
+            } 
+            tmpOutput[i][k] = S;       
+        }
+    }
+
+    // 임시 출력 -> 원 출력
+    for (var i = 0; i < outH; i++){
+        for(var k = 0; k < outW; k++){
+            outImage[i][k] = parseInt(tmpOutput[i][k]);;
+        }
+    }
+    displayNewImage();
+}
+
+// DoG (9x9)
+function DoG9_image() {
+    // 중요! 출력 영상의 크기를 계산 - 기하학적 처리에서만 바뀜(회전 확대/축소 등)
+    outH = inH;
+    outW = inW;
+    // 이미지 크기의 2차원 메모리를 할당(확보)
+    outImage = new Array(outH);
+    for(var i = 0; i < outH; i++){
+        outImage[i] = new Array(outW);
+    }
+    // 캔버스 크기 지정 
+    outCanvas.height = outH;
+    outCanvas.width = outW; 
+    
+    // ** 진짜 영상처리 알고리즘 ** //
+    // (짱! 중요)
+    var mask = [[ 0.0,  0.0,  0.0, -1.0, -1.0, -1.0,  0.0,  0.0,  0.0],
+                [ 0.0, -2.0, -3.0, -3.0, -3.0, -3.0, -3.0, -2.0,  0.0],
+                [ 0.0, -3.0, -2.0, -1.0, -1.0, -1.0, -2.0, -3.0,  0.0],
+                [-1.0, -3.0, -1.0,  9.0,  9.0,  9.0, -1.0, -3.0, -1.0],
+                [-1.0, -3.0, -1.0,  9.0, 19.0,  9.0, -1.0, -3.0, -1.0],
+                [-1.0, -3.0, -1.0,  9.0,  9.0,  9.0, -1.0, -3.0, -1.0],
+                [ 0.0, -3.0, -2.0, -1.0, -1.0, -1.0, -2.0, -3.0,  0.0],
+                [ 0.0, -2.0, -3.0, -3.0, -3.0, -3.0, -3.0, -2.0,  0.0],
+                [ 0.0,  0.0,  0.0, -1.0, -1.0, -1.0,  0.0,  0.0,  0.0]];
+
+    // 임시 입력 배열 (입력배열 + 2)
+    var tmpInput = new Array(inH +8);
+    for(var i = 0; i < inH + 8; i++){
+        tmpInput[i] = new Array(inW + 8);
+    }
+
+    // 임시 입력 배열 초기화(127로)
+    for (var i = 0; i < inH + 8; i++){
+        for(var k = 0; k < inW + 8; k++){
+            tmpInput[i][k] = 127.0;
+        }
+    }
+
+    //원 입력 --> 임시입력 : 가운데에 넣어야 함
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            tmpInput[i+4][k+4] = parseFloat(inImage[i][k]);
+        }
+    }
+
+    // 임시 출력 배열 (출력 배열 크기 동일)
+    var tmpOutput = new Array(outH);
+    for(var i = 0; i < outH; i++){
+        tmpOutput[i] = new Array(outW);
+    }
+
+    //*** 회선 연산 ***
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            // 한 점에 대해서 처리
+            var S = 0.0;
+            for(var m=0; m<9; m++){
+                for(var n=0; n<9; n++){
+                    S += tmpInput[i+m][k+n] * mask[m][n];
+                }
+            } 
+            tmpOutput[i][k] = S;       
+        }
+    }
+
+    // 임시 출력 -> 원 출력
+    for (var i = 0; i < outH; i++){
+        for(var k = 0; k < outW; k++){
+            outImage[i][k] = parseInt(tmpOutput[i][k]);;
+        }
+    }
+    displayNewImage();
+}
+
+// 라플라시안 연산자
+function Laplacian_image() {
+    // 중요! 출력 영상의 크기를 계산 - 기하학적 처리에서만 바뀜(회전 확대/축소 등)
+    outH = inH;
+    outW = inW;
+    // 이미지 크기의 2차원 메모리를 할당(확보)
+    outImage = new Array(outH);
+    for(var i = 0; i < outH; i++){
+        outImage[i] = new Array(outW);
+    }
+    // 캔버스 크기 지정 
+    outCanvas.height = outH;
+    outCanvas.width = outW; 
+    
+    // ** 진짜 영상처리 알고리즘 ** //
+    // (짱! 중요)
+    var mask = [[ -1.0, -1.0, -1.0 ],
+                [ -1.0,  8.0, -1.0 ],
+                [ -1.0, -1.0, -1.0 ]];
+
+    // 임시 입력 배열 (입력배열 + 2)
+    var tmpInput = new Array(inH + 2);
+    for(var i = 0; i < inH + 2; i++){
+        tmpInput[i] = new Array(inW + 2);
+    }
+
+    // 임시 입력 배열 초기화(127로)
+    for (var i = 0; i < inH+2; i++){
+        for(var k = 0; k < inW+2; k++){
+            tmpInput[i][k] = 127.0;
+        }
+    }
+
+    //원 입력 --> 임시입력 : 가운데에 넣어야 함
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            tmpInput[i+1][k+1] = parseFloat(inImage[i][k]);
+        }
+    }
+
+    // 임시 출력 배열 (출력 배열 크기 동일)
+    var tmpOutput = new Array(outH);
+    for(var i = 0; i < outH; i++){
+        tmpOutput[i] = new Array(outW);
+    }
+
+    //*** 회선 연산 ***
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            // 한 점에 대해서 처리
+            var S = 0.0;
+            for(var m=0; m<3; m++){
+                for(var n=0; n<3; n++){
+                    S += tmpInput[i+m][k+n] * mask[m][n];
+                }
+            } 
+            tmpOutput[i][k] = S;       
+        }
+    }
+    // 후처리 : 마스크 합계가 0이라면 127 정도를 더하기.
+    for (var i = 0; i < inH; i++){
+        for(var k = 0; k < inW; k++){
+            tmpOutput[i][k] += 127.0;
+        }
+    }
+
+    // 임시 출력 -> 원 출력
+    for (var i = 0; i < outH; i++){
+        for(var k = 0; k < outW; k++){
+            outImage[i][k] = parseInt(tmpOutput[i][k]);;
+        }
+    }
+    displayNewImage();
+}
+
+
+</script>
+</head>
+<body onload="init()">
+
+    <title> Photo Edit </title>
+    <div class="container">
+        <div>
+            <div id="inner-container">
+                <br><br>
+                <!--제목-->
+                <h1 class="text"> Photo Edit </h1>
+
+                <form>
+                    <div id="container">
+                        
+                        <!--파일 업로드 부분-->
+                        <label id="labelstyle">
+                            사진 선택
+                            <input type="file" id="inFile" onchange="openImage()" style="display:none;" />
+                        </label>
+
+                        <br><br>
+
+                        <!-- 버튼 부분: 편집 상태 저장, 초기화-->
+                        <a herf="" class="button btnPush btnLightBlue" onclick="saveNow();return false;">
+                            편집 상태 저장
+                        </a>
+                        <a herf="" class="button btnPush btnLightBlue" onclick="reset_Image();return false;">
+                            초기화
+                        </a> <br><br><br>
+
+                        <div class="box">
+                            <select name="pixel" onchange="selectAlgo(this.form.pixel)">
+                                <br>
+                                <option value=0> 화소점 선택 </option>
+                                <optgroup label="화소점 처리">
+                                    <option value=100> 동일영상 </option>
+                                    <option value=101> 밝게하기 </option>
+                                    <option value=102> 어둡게하기 </option>
+                                    <option value=111> 명도 증가</option>
+                                    <option value=112> 명도 감소</option>
+                                    <option value=103> 반전하기 </option>
+                                    <option value=104> 흑백(128기준) </option>
+                                    <option value=105> 흑백(평균값 기준) </option>
+                                    <option value=106> 흑백(중앙값 기준)</option>
+                                    <option value=107> 감마 보정</option>
+                                    <option value=108> 범위 강조</option>
+                                    <option value=109> 파라볼라(CAP) </option>
+                                    <option value=110> 파라볼라(CUP) </option>
+                                    <option value=113> 포스터라이징 </option>
+                                </optgroup>
+                            </select>
+
+                            <select name="geometry" onchange="selectAlgo(this.form.geometry)">
+                                <option value=0> 기하학 선택 </option>
+                                <optgroup label="기하학 처리">
+                                    <option value=201> 좌우 대칭 </option>
+                                    <option value=202> 상하 대칭 </option>
+                                    <option value=203> 축소 </option>
+                                    <option value=204> 확대(홀 발생) </option>
+                                    <option value=205> 확대 </option>
+                                    <option value=206> 이동 </option>
+                                    <option value=207> 회전 </option>
+                                </optgroup>
+                            </select>
+
+                            <select name="histogram" onchange="selectAlgo(this.form.histogram)">
+                                <option value=0> 히스토그램 선택 </option>
+                                <optgroup label="히스토그램 처리">
+                                    <option value=301> 히스토 스트레칭 </option>
+                                    <option value=302> 엔드인 탐색 </option>
+                                    <option value=303> 평활화 </option>
+                                    <option value=304> 명세화 </option>
+                                </optgroup>
+                            </select>
+
+                            <select name="area" onchange="selectAlgo(this.form.area)">
+                                <option value=0> 화소영역 선택 </option>
+                                <optgroup label="화소영역 처리">
+                                    <option value=401> 엠보싱 </option>
+                                    <option value=408> 엠보싱2 </option>
+                                    <option value=402> 블러링 </option>
+                                    <option value=403> 경계선(프리윗) </option>
+                                    <option value=416> 경계선(로버츠) </option>
+                                    <option value=404> 샤프닝 </option>
+                                    <option value=411> 샤프닝2 </option>
+                                    <option value=412> 샤프닝3 </option>
+                                    <option value=405> 고주파샤프닝 </option>
+                                    <option value=406> 가우시안 </option>
+                                    <option value=407> 유사연산자 </option>
+                                    <option value=409> 차연산자 </option>
+                                    <option value=413> 라플라시안 연산자 </option>
+                                    <option value=410> LoG 연산자 </option>
+                                    <option value=414> DoG(7x7) 연산자 </option>
+                                    <option value=415> DoG(9x9) 연산자 </option>
+                                </optgroup>
+                            </select>
+
+                            </select>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="containerCanvas">
+                <br>
+                <canvas id="inCanvas" style="border: 3px solid #9ca3ce"> </canvas>
+                <canvas id="outCanvas" style="border: 3px solid #e3b1c1"> </canvas>
+            </div>
+        </div>
+    </div>
+    
+
+</body>
+</html>
